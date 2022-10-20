@@ -9,7 +9,7 @@ int ppm;
 #define Co2PIN 18 
 # define MoisturePin 25
 #define DHTTYPE DHT22 
-DHT dht(DHTPIN, DHTTYPE);z
+DHT dht(DHTPIN, DHTTYPE);
 BH1750 lightMeter;
 
 void setup()
@@ -28,7 +28,7 @@ void setup()
 void loop()
 {
   Serial.print("Moisture Sensor Value:");
-  Serial.println(analogRead(sensorPin));
+  Serial.println(analogRead(MoisturePin));
   float lux = lightMeter.readLightLevel();
   Serial.print("Light: ");
   Serial.print(lux);
