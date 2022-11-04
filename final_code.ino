@@ -14,7 +14,7 @@ WebServer server(80);
 unsigned long duration, th, tl;
 int ppm;
 #define Co2PIN 18 
-# define MoisturePin 25
+# define MoisturePin 36
 #define DHTTYPE DHT22 
 DHT dht(DHTPIN, DHTTYPE);
 BH1750 lightMeter;
@@ -64,7 +64,7 @@ void setup()
 void loop()
 {
   while (mqttClient.connected() == NULL) {
-    Serial.println("COnnecting to mqtt...");
+    Serial.println("Connecting to mqtt...");
     mqttClient.connect(clientID, mqttUserName, mqttPass);
     delay(1000);
   }
@@ -77,14 +77,14 @@ void loop()
   Serial.println(Moisture);
 //  ThingSpeak.setField(2,Moisture);
   String dataString2 = "field2=" + String(Moisture);
-  mqttClient.publish(topicString.c_str(), dataString2.c_str());
+  
   float lux = lightMeter.readLightLevel();
   Serial.print("Light: ");
   Serial.print(lux);
   Serial.println(" lx");
 //  ThingSpeak.setField(5,lux);
   String dataString5 = "field5=" + String(lux);
-  mqttClient.publish(topicString.c_str(), dataString5.c_str());
+  
 
   delay(2000);
 
@@ -93,12 +93,12 @@ void loop()
   float h = dht.readHumidity();
 //  ThingSpeak.setField(4,h);
   String dataString4 = "field4=" + String(h);
-  mqttClient.publish(topicString.c_str(), dataString4.c_str());
+  
   // Read temperature as Celsius (the default)
   float t = dht.readTemperature();
 //  ThingSpeak.setField(3,t);
   String dataString3 = "field3=" + String(t);
-  mqttClient.publish(topicString.c_str(), dataString3.c_str());
+  
   // Read temperature as Fahrenheit (isFahrenheit = true)
   float f = dht.readTemperature(true);
 
@@ -121,7 +121,7 @@ void loop()
         Serial.println(" ppm");
   }
   String dataString1 = "field1=" + String(ppm);
-  mqttClient.publish(topicString.c_str(), dataString1.c_str());
+  
   if (isnan(h) || isnan(t) || isnan(f)) {
     Serial.println(F("Failed to read from DHT sensor!"));
     return;
@@ -143,5 +143,10 @@ void loop()
   Serial.print(F("°C "));
   Serial.print(hif);
   Serial.println(F("°F"));
-  
+  // Thingspeak go brrr
+  mqttClient.publish(topicString.c_str(), dataString1.c_str());
+  mqttClient.publish(topicString.c_str(), dataString2.c_str());
+  mqttClient.publish(topicString.c_str(), dataString3.c_str());
+  mqttClient.publish(topicString.c_str(), dataString4.c_str());
+  mqttClient.publish(topicString.c_str(), dataString5.c_str());
 }
