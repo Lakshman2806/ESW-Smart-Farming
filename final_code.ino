@@ -5,11 +5,8 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <ThingSpeak.h>
-#include <PubSubClient.h>
-#include <WebServer.h>
-#include <Adafruit_MQTT.h>
-#include <Adafruit_MQTT_Client.h>
-WebServer server(80);
+
+
 #define DHTPIN 26
 unsigned long duration, th, tl;
 int ppm;
@@ -23,11 +20,6 @@ BH1750 lightMeter;
 const char* ssid = "thisis";
 const char* pass = "thatis1234";
 
-const char* Mqttserver = "mqtt3.thingspeak.com";
-const char* mqttUserName = "ACcpHwYbGg8XLw4dNhIrGzg";
-const char* mqttPass = "CrIzrcDl6pUljMYwKpPp7ovA";
-
-const char* clientID = "ACcpHwYbGg8XLw4dNhIrGzg";
 
 long writeChannelID =  1904954;
 const char* writeAPIKey = "FD9BGYZYGXBALW78";
@@ -37,7 +29,6 @@ int port = 1883;
 
 WiFiClient client;
 
-PubSubClient mqttClient(Mqttserver, 1883, client);
 
 
 void setup()
@@ -58,47 +49,40 @@ void setup()
     delay(1000);
   }
   Serial.println("WiFi Connected!");
-  mqttClient.setServer(Mqttserver, port);
+  ThingSpeak.begin(client);
 }
 
 void loop()
 {
-  while (mqttClient.connected() == NULL) {
-    Serial.println("Connecting to mqtt...");
-    mqttClient.connect(clientID, mqttUserName, mqttPass);
-    delay(1000);
-  }
-  mqttClient.loop();
-  String dataString;
-  String topicString = "channels/" + String( writeChannelID ) + "/publish";
+  
   
   Serial.print("Moisture Sensor Value:");
   float Moisture=analogRead(MoisturePin);
   Serial.println(Moisture);
-//  ThingSpeak.setField(2,Moisture);
-  String dataString2 = "field2=" + String(Moisture);
-  
+  ThingSpeak.setField(2,Moisture);
+//  String dataString2 = "field2=" + String(Moisture);
+//  mqttClient.publish(topicString.c_str(), dataString2.c_str());
   float lux = lightMeter.readLightLevel();
   Serial.print("Light: ");
   Serial.print(lux);
   Serial.println(" lx");
-//  ThingSpeak.setField(5,lux);
-  String dataString5 = "field5=" + String(lux);
-  
+  ThingSpeak.setField(5,lux);
+//  String dataString5 = "field5=" + String(lux);
+//  mqttClient.publish(topicString.c_str(), dataString5.c_str());
 
   delay(2000);
 
   // Reading temperature or humidity takes about 250 milliseconds!
   // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
   float h = dht.readHumidity();
-//  ThingSpeak.setField(4,h);
-  String dataString4 = "field4=" + String(h);
-  
+  ThingSpeak.setField(4,h);
+//  String dataString4 = "field4=" + String(h);
+//  mqttClient.publish(topicString.c_str(), dataString4.c_str());
   // Read temperature as Celsius (the default)
   float t = dht.readTemperature();
-//  ThingSpeak.setField(3,t);
-  String dataString3 = "field3=" + String(t);
-  
+  ThingSpeak.setField(3,t);
+//  String dataString3 = "field3=" + String(t);
+//  mqttClient.publish(topicString.c_str(), dataString3.c_str());
   // Read temperature as Fahrenheit (isFahrenheit = true)
   float f = dht.readTemperature(true);
 
@@ -111,17 +95,17 @@ void loop()
   if (ppm > 1000) {
 //    Serial.print("Hello");
     Serial.println(ppm);
-//    ThingSpeak.setField(1,ppm);
+    ThingSpeak.setField(1,ppm);
     //ThingSpeak.setField(1, ppm);
   }
   else {
     Serial.print(" Co2 Concentration: ");
     Serial.println(ppm);
-//    ThingSpeak.setField(1, ppm);
+    ThingSpeak.setField(1, ppm);
         Serial.println(" ppm");
   }
-  String dataString1 = "field1=" + String(ppm);
-  
+//  String dataString1 = "field1=" + String(ppm);
+//  mqttClient.publish(topicString.c_str(), dataString1.c_str());
   if (isnan(h) || isnan(t) || isnan(f)) {
     Serial.println(F("Failed to read from DHT sensor!"));
     return;
@@ -143,10 +127,12 @@ void loop()
   Serial.print(F("°C "));
   Serial.print(hif);
   Serial.println(F("°F"));
-  // Thingspeak go brrr
-  mqttClient.publish(topicString.c_str(), dataString1.c_str());
-  mqttClient.publish(topicString.c_str(), dataString2.c_str());
-  mqttClient.publish(topicString.c_str(), dataString3.c_str());
-  mqttClient.publish(topicString.c_str(), dataString4.c_str());
-  mqttClient.publish(topicString.c_str(), dataString5.c_str());
+  int x = ThingSpeak.writeFields(writeChannelID, writeAPIKey);
+  if(x == 200){
+    Serial.println("Channel update successful.");
+  }
+  else{
+    Serial.println("Problem updating channel. HTTP error code " + String(x));
+  }
+  delay(5000);
 }
