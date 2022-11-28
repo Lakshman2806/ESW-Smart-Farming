@@ -1,234 +1,255 @@
-const int trigPin = 25;
-const int echoPin = 27;
-const int fill = 4;
-const int filltrigPin = 26;
-const int fillechoPin = 33;
-
-#define BLYNK_TEMPLATE_ID "TMPLc4LGbm05"
-#define BLYNK_DEVICE_NAME "Fully Automatic Water Dipsenser"
-#define BLYNK_AUTH_TOKEN "nnTJU1iHOd74OJoh5OCeuTtNs6acnMbJ"
-#define SOUND_SPEED 0.034
-#define FILL_SERVOPIN 32
-#define DISP_SERVOPIN 2
-//  #0define ONE_WIRE_BUS 23
-
-#include <BlynkSimpleEsp32.h>
-#include <Servo.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
-#include <HTTPClient.h>
+#include <Wire.h>
+#include <BH1750.h>
+#include "DHT.h"
+#include <SPI.h>
 #include <WiFi.h>
-#include "time.h"
-#include "ArduinoJson.h"
+#include <WiFiClient.h>
+#include <ThingSpeak.h>
 
-char auth[] = BLYNK_AUTH_TOKEN;
-char ssid[] = "lab@test";
-char pass[] = "lab12345";
-int flag = 0;
-int dispflag=0;
-int nodisp=0;
-int fillflag=0;
-String cse_ip = "192.168.15.76"; 
-String cse_port = "8080";
-String server = "http://" + cse_ip + ":" + cse_port + "/~/in-cse/in-name/";
-String ae="Water_Sensing";
-// String cnt1="temperature";
-String cnt2="Water_level";
-String cnt3="dispcount";
-//OneWire oneWire(ONE_WIRE_BUS);
-//DallasTemperature TempSensor(&oneWire);
-HTTPClient http;
-BlynkTimer timer;
-BLYNK_WRITE(V0) // Function for button
+#define DHTPIN 26
+unsigned long duration, th, tl;
+int ppm;
+#define Co2PIN 18
+#define MoisturePin 36
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+BH1750 lightMeter;
+
+#define CSE_IP "esw-onem2m.iiit.ac.in"
+#define CSE_PORT 443
+#define OM2M_ORGIN "fIsOtR:&LTnM1"
+#define OM2M_MN "/~/in-cse/in-name/"
+#define OM2M_AE "Team-32"
+#define OM2M_DATA_CONT "Node-1/Data"
+
+void createCICO2(String &val)
 {
-  int value = param.asInt(); // Takes the value of V0
+  String server = "https://" + String() + CSE_IP + ":" + String() + CSE_PORT + String() + OM2M_MN;
 
-  if (value == 1)
+  http.begin(server + String() + OM2M_AE + "/" + OM2M_DATA_CONT + "/");
+
+  http.addHeader("X-M2M-Origin", "admin:admin");
+  http.addHeader("Content-Type", "application/json;ty=4");
+  http.addHeader("Content-Length", "100");
+
+  String label = "node1";
+
+  int code = http.POST("{\"m2m:cin\": {\"cnf\":\"application/json\",\"con\": " + String(val) + "}}");
+
+  Serial.println(code);
+  if (code == -1)
   {
-    flag = 1;
-    digitalWrite(fill, HIGH); // sets the fill button high
+    Serial.println("Unable to connect to the server");
   }
-  else
-  {
-    flag = 0;
-    digitalWrite(fill, LOW); // Set digital pin 2 LOW
-  }
+  http.end();
 }
 
-float HandDistance = 5;
-float FillMinThreshold = 14;
-float FillMaxThreshold = 8;
-double duration;
-float distanceCm;
-double fillduration;
-float filldistanceCm;
-float temperature;
-
-Servo autoDisp_servo;
-Servo autoFill_servo;
-
-void myTimerEvent()
+void createCImoisture(String &val)
 {
-  double temp = 26 - filldistanceCm;
-  Blynk.virtualWrite(V2, temp);
-  Blynk.virtualWrite(V1, temperature);
-  Blynk.virtualWrite(V3, nodisp);
-}
+  String server = "https://" + String() + CSE_IP + ":" + String() + CSE_PORT + String() + OM2M_MN;
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(trigPin, OUTPUT);
-  pinMode(echoPin, INPUT);
-  pinMode(fill, OUTPUT);
-  pinMode(filltrigPin, OUTPUT);
-  pinMode(fillechoPin, INPUT);
-//  pinMode(ONE_WIRE_BUS, INPUT);
-//
-//  TempSensor.begin();
+  http.begin(server + String() + OM2M_AE + "/" + OM2M_DATA_CONT + "/");
 
-  Blynk.begin(auth, ssid, pass);
-  timer.setInterval(500L, myTimerEvent);
+  http.addHeader("X-M2M-Origin", "admin:admin");
+  http.addHeader("Content-Type", "application/json;ty=4");
+  http.addHeader("Content-Length", "100");
 
-  autoFill_servo.attach(FILL_SERVOPIN);
-  autoFill_servo.write(0);
+  String label = "node1";
 
-  autoDisp_servo.attach(DISP_SERVOPIN);
-  autoDisp_servo.write(0);
+  int code = http.POST("{\"m2m:cin\": {\"cnf\":\"application/json\",\"con\": " + String(val) + "}}");
 
-  WiFi.begin(ssid,pass);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.println("Connecting...");
-  }
-}
-
-void loop() {
-  Blynk.run();
-  timer.run();
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
-
-  duration = pulseIn(echoPin, HIGH);
-
-  distanceCm = duration * SOUND_SPEED / 2;
-
-  Serial.print("Distance (cm): ");
-  Serial.println(distanceCm);
-
-  if (distanceCm > HandDistance)
+  Serial.println(code);
+  if (code == -1)
   {
-    int temp;
-    temp = dispflag;
-    Serial.println("dispensing OFF");
-    autoDisp_servo.write(150);
-    dispflag=0;
-    nodisp+=dispflag^temp;
+    Serial.println("Unable to connect to the server");
+  }
+  http.end();
+}
+
+void createCITemp(String &val)
+{
+  String server = "https://" + String() + CSE_IP + ":" + String() + CSE_PORT + String() + OM2M_MN;
+
+  http.begin(server + String() + OM2M_AE + "/" + OM2M_DATA_CONT + "/");
+
+  http.addHeader("X-M2M-Origin", "admin:admin");
+  http.addHeader("Content-Type", "application/json;ty=4");
+  http.addHeader("Content-Length", "100");
+
+  String label = "node1";
+
+  int code = http.POST("{\"m2m:cin\": {\"cnf\":\"application/json\",\"con\": " + String(val) + "}}");
+
+  Serial.println(code);
+  if (code == -1)
+  {
+    Serial.println("Unable to connect to the server");
+  }
+  http.end();
+}
+
+void createCIHumidity(String &val)
+{
+  String server = "https://" + String() + CSE_IP + ":" + String() + CSE_PORT + String() + OM2M_MN;
+
+  http.begin(server + String() + OM2M_AE + "/" + OM2M_DATA_CONT + "/");
+
+  http.addHeader("X-M2M-Origin", "admin:admin");
+  http.addHeader("Content-Type", "application/json;ty=4");
+  http.addHeader("Content-Length", "100");
+
+  String label = "node1";
+
+  int code = http.POST("{\"m2m:cin\": {\"cnf\":\"application/json\",\"con\": " + String(val) + "}}");
+
+  Serial.println(code);
+  if (code == -1)
+  {
+    Serial.println("Unable to connect to the server");
+  }
+  http.end();
+}
+
+void createCILum(String &val)
+{
+  String server = "https://" + String() + CSE_IP + ":" + String() + CSE_PORT + String() + OM2M_MN;
+
+  http.begin(server + String() + OM2M_AE + "/" + OM2M_DATA_CONT + "/");
+
+  http.addHeader("X-M2M-Origin", "admin:admin");
+  http.addHeader("Content-Type", "application/json;ty=4");
+  http.addHeader("Content-Length", "100");
+
+  String label = "node1";
+
+  int code = http.POST("{\"m2m:cin\": {\"cnf\":\"application/json\",\"con\": " + String(val) + "}}");
+
+  Serial.println(code);
+  if (code == -1)
+  {
+    Serial.println("Unable to connect to the server");
+  }
+  http.end();
+}
+
+// Thingspeak stuff go brrr
+const char *ssid = "esw-m19@iiith";
+const char *pass = "e5W-eMai@3!20hOct";
+
+long writeChannelID = 1904954;
+const char *writeAPIKey = "FD9BGYZYGXBALW78";
+
+int port = 1883;
+
+WiFiClient client;
+
+void setup()
+{
+  Serial.begin(9600);
+  dht.begin();
+  Wire.begin();
+  // On esp8266 you can select SCL and SDA pins using Wire.begin(D4, D3);
+  // For Wemos / Lolin D1 Mini Pro and the Ambient Light shield use Wire.begin(D2, D1);
+
+  lightMeter.begin();
+
+  Serial.println(F("BH1750 Test begin"));
+
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.println("Connecting to WiFi...");
+    delay(1000);
+  }
+  Serial.println("WiFi Connected!");
+  ThingSpeak.begin(client);
+}
+
+void loop()
+{
+  Serial.print("Moisture Sensor Value:");
+  float Moisture = analogRead(MoisturePin);
+  float soilmoisturepercent = map(Moisture, 4095, 2400, 0, 100);
+  Serial.println(soilmoisturepercent);
+  ThingSpeak.setField(2, soilmoisturepercent);
+  String mstr = (String)soilmoisturepercent
+  createCImoisture(mstr)
+  //  String dataString2 = "field2=" + String(Moisture);
+  //  mqttClient.publish(topicString.c_str(), dataString2.c_str());
+  float lux = lightMeter.readLightLevel();
+  Serial.print("Light: ");
+  Serial.print(lux);
+  Serial.println(" lx");
+  ThingSpeak.setField(5, lux);
+  String lstr = (String)lux
+  createCILum(lstr)
+  //  String dataString5 = "field5=" + String(lux);
+  //  mqttClient.publish(topicString.c_str(), dataString5.c_str());
+
+  //  delay(10000);
+
+  // Reading temperature or humidity takes about 250 milliseconds!
+  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
+  float h = dht.readHumidity();
+  ThingSpeak.setField(4, h);
+  String hstr = (String)h
+  createCIHumidity(hstr)
+  //  String dataString4 = "field4=" + String(h);
+  //  mqttClient.publish(topicString.c_str(), dataString4.c_str());
+  // Read temperature as Celsius (the default)
+  float t = dht.readTemperature();
+  ThingSpeak.setField(3, t);
+  String tstr = (String)t
+  createCITemp(tstr)
+  //  String dataString3 = "field3=" + String(t);
+  //  mqttClient.publish(topicString.c_str(), dataString3.c_str());
+  // Read temperature as Fahrenheit (isFahrenheit = true)
+  float f = dht.readTemperature(true);
+
+  // Check if any reads failed and exit early (to try again).
+
+  th = pulseIn(Co2PIN, HIGH, 2008000) / 1000;
+  tl = 1004 - th;
+  ppm = 2000 * (th - 2) / (th + tl - 4);
+
+  Serial.print("Co2 Concentration: ");
+  Serial.print(ppm);
+  ThingSpeak.setField(1, ppm);
+  String pstr = (String)ppm
+  createCICO2(pstr)
+  Serial.println("ppm");
+  //  String dataString1 = "field1=" + String(ppm);
+  //  mqttClient.publish(topicString.c_str(), dataString1.c_str());
+  if (isnan(h) || isnan(t) || isnan(f))
+  {
+    Serial.println(F("Failed to read from DHT sensor!"));
+    return;
+  }
+
+  // Compute heat index in Fahrenheit (the default)
+  float hif = dht.computeHeatIndex(f, h);
+  // Compute heat index in Celsius (isFahreheit = false)
+  float hic = dht.computeHeatIndex(t, h, false);
+
+  Serial.print(F("Humidity: "));
+  Serial.print(h);
+  Serial.print(F("%  Temperature: "));
+  Serial.print(t);
+  Serial.print(F("°C "));
+  Serial.print(f);
+  Serial.print(F("°F  Heat index: "));
+  Serial.print(hic);
+  Serial.print(F("°C "));
+  Serial.print(hif);
+  Serial.println(F("°F"));
+  int x = ThingSpeak.writeFields(writeChannelID, writeAPIKey);
+  if (x == 200)
+  {
+    Serial.println("Channel update successful\n");
   }
   else
   {
-    Serial.println("dispensing ON");
-    autoDisp_servo.write(0);
-    dispflag=1;
+    Serial.println("Problem updating channel. HTTP error code " + String(x) + "\n");
   }
-
-  digitalWrite(filltrigPin, LOW);
-  delayMicroseconds(2);
-
-  digitalWrite(filltrigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(filltrigPin, LOW);
-
-  fillduration = pulseIn(fillechoPin, HIGH);
-
-  filldistanceCm = fillduration * SOUND_SPEED / 2;
-
-  Serial.print("fillDistance (cm): ");
-  Serial.println(filldistanceCm);
-
-  Serial.println(flag);
-
-  if (flag == 0)
-  {
-    if ((filldistanceCm >= FillMinThreshold || fillflag==1)&& filldistanceCm > FillMaxThreshold )
-    {
-      Serial.println("filling ON");
-      fillflag = 1;
-      autoFill_servo.write(150);
-    }
-    else
-    {
-      Serial.println("filling OFF");
-      fillflag = 0;
-      autoFill_servo.write(0);
-    }
-  }
-
-  else
-  {
-    if (filldistanceCm >= FillMaxThreshold)
-    {
-      Serial.println("isWorking");
-      Serial.println("filling ON");
-//      autoFill_servo.write(150);
-//      delay(100);
-      autoFill_servo.write(150);
-    }
-    else
-    {
-      Serial.println("filling OFF");
-      autoFill_servo.write(0);
-      Blynk.virtualWrite(V0, 0);
-      flag = 0;
-    }
-  }
-
-  
-  Serial.println(fillflag);
-  Serial.println();
- 
-  String y=(String)(26-filldistanceCm);
-  createCIdist(y);
-  String z=(String)nodisp;
-  createCIdisp(z);
- 
-  delay(50);
-}
-void createCIdist(String& val){
-http.begin(server + String() + ae + "/" + cnt2 + "/");
-
-http.addHeader("X-M2M-Origin", "admin:admin");
-http.addHeader("Content-Type", "application/json;ty=4");
-http.addHeader("Content-Length", "100");
-
-String label = "node1";
-
-int code = http.POST("{\"m2m:cin\": {\"cnf\":\"application/json\",\"con\": " + String(val) + "}}");
-
-Serial.println(code);
-if(code == -1) {
-  Serial.println("Unable to connect to the server");
-}
-http.end();
-}
-
-
-void createCIdisp(String& val){
-http.begin(server + String() + ae + "/" + cnt3 + "/");
-
-http.addHeader("X-M2M-Origin", "admin:admin");
-http.addHeader("Content-Type", "application/json;ty=4");
-http.addHeader("Content-Length", "100");
-
-String label = "node1";
-
-int code = http.POST("{\"m2m:cin\": {\"cnf\":\"application/json\",\"con\": " + String(val) + "}}");
-
-Serial.println(code);
-if(code == -1) {
-  Serial.println("Unable to connect to the server");
-}
-http.end();
+  delay(15000);
 }
